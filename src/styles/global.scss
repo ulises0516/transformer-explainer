@@ -2,6 +2,11 @@ svg {
 	overflow: visible;
 }
 
+html,
+body {
+	background: white;
+}
+
 [role='button'],
 button {
 	svg:focus {

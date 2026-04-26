@@ -37,6 +37,7 @@ export const inputTextExample = [
 
 const initialExIdx = 0;
 export const selectedExampleIdx = writable<number>(initialExIdx);
+export const vizMode = writable<'transformer' | 'vision' | 'summarization'>('transformer');
 
 export const modelSession = writable<ort.InferenceSession>();
 

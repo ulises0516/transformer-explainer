@@ -103,6 +103,7 @@
 	#app {
 		height: 100vh;
 		min-width: 900px;
+		background: white;
 	}
 
 	#landing {

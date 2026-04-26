@@ -11,7 +11,8 @@
 		expandedBlock,
 		weightPopover,
 		isOnAnimation,
-		userId
+		userId,
+		vizMode
 	} from '~/store';
 	import { textPages } from '~/utils/textbookPages';
 	import TextbookTooltip from './common/TextbookTooltip.svelte';
@@ -119,6 +120,8 @@
 					? document.querySelector('.step.transformer-blocks .content .column.final')
 					: document.querySelector('.step.transformer-blocks .content');
 
+			if (!embedding || !block || !topbarHeight) return;
+
 			const embeddingRect = embedding.getBoundingClientRect();
 			const blockRect = block.getBoundingClientRect();
 
@@ -165,42 +168,44 @@
 	};
 </script>
 
-<div
-	class="transformer-bounding"
-	class:active={$isBoundingBoxActive}
-	style={`left:${boundingPos.left}px;top:${boundingPos.top - rootRem * 3.5}px;width:${boundingPos.width}px;`}
-></div>
-<!-- svelte-ignore a11y-no-static-element-interactions -->
-<div
-	class="transformer-bounding-title"
-	data-click="transformer-bounding-title"
-	class:deactive={!!$weightPopover}
-	class:hide={!!$expandedBlock.id}
-	on:mouseenter={() => {
-		isBoundingBoxActive.set(true);
-	}}
-	on:mouseleave={() => {
-		isBoundingBoxActive.set(false);
-	}}
-	style={`top:${boundingPos.top - rootRem * 3.5}px;`}
-	class:active={$isBoundingBoxActive}
->
-	<TextbookTooltip id="blocks">
-		<span class="title-text">Transformer Block {$blockIdxTemp + 1}</span>
-	</TextbookTooltip>
-	<button
-		data-click="transformer-block-prev-btn"
-		on:click={onClickPrev}
-		disabled={$isOnAnimation || $isOnBlockTransition || $blockIdxTemp === 0}
-		><AngleLeftOutline size="sm" /></button
+{#if $vizMode === 'transformer'}
+	<div
+		class="transformer-bounding"
+		class:active={$isBoundingBoxActive}
+		style={`left:${boundingPos.left}px;top:${boundingPos.top - rootRem * 3.5}px;width:${boundingPos.width}px;`}
+	></div>
+	<!-- svelte-ignore a11y-no-static-element-interactions -->
+	<div
+		class="transformer-bounding-title"
+		data-click="transformer-bounding-title"
+		class:deactive={!!$weightPopover}
+		class:hide={!!$expandedBlock.id}
+		on:mouseenter={() => {
+			isBoundingBoxActive.set(true);
+		}}
+		on:mouseleave={() => {
+			isBoundingBoxActive.set(false);
+		}}
+		style={`top:${boundingPos.top - rootRem * 3.5}px;`}
+		class:active={$isBoundingBoxActive}
 	>
-	<button
-		data-click="transformer-block-next-btn"
-		on:click={onClickNext}
-		disabled={$isOnAnimation || $isOnBlockTransition || $blockIdxTemp === $modelMeta.layer_num - 1}
-		><AngleRightOutline size="sm" /></button
-	>
-</div>
+		<TextbookTooltip id="blocks">
+			<span class="title-text">Transformer Block {$blockIdxTemp + 1}</span>
+		</TextbookTooltip>
+		<button
+			data-click="transformer-block-prev-btn"
+			on:click={onClickPrev}
+			disabled={$isOnAnimation || $isOnBlockTransition || $blockIdxTemp === 0}
+			><AngleLeftOutline size="sm" /></button
+		>
+		<button
+			data-click="transformer-block-next-btn"
+			on:click={onClickNext}
+			disabled={$isOnAnimation || $isOnBlockTransition || $blockIdxTemp === $modelMeta.layer_num - 1}
+			><AngleRightOutline size="sm" /></button
+		>
+	</div>
+{/if}
 
 <style lang="scss">
 	.transformer-bounding-title {

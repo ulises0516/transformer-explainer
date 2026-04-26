@@ -19,7 +19,8 @@
 		isOnBlockTransition,
 		blockIdx,
 		isTextbookOpen,
-		userId
+		userId,
+		vizMode
 	} from '~/store';
 	import { PreTrainedTokenizer } from '@xenova/transformers';
 	import Sankey from '~/components/Sankey.svelte';
@@ -43,29 +44,46 @@
 	import BlockTransition from '~/components/BlockTransition.svelte';
 	import QKV from '~/components/QKV.svelte';
 	import Textbook from '~/components/textbook/Textbook.svelte';
+	import MultiTaskFlow from '~/components/MultiTaskFlow.svelte';
+	import type { PipelineMode } from '~/constants/pipelineModes';
 
 	ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/';
 	ort.env.logLevel = 'error';
 
 	let active = false;
 	let appStartTime = Date.now();
+	let isModelFetchStarted = false;
+	let selectedPipelineMode: PipelineMode = 'vision';
 
 	// fetch model
-	onMount(async () => {
-		const gpt2Tokenizer = await AutoTokenizer.from_pretrained('Xenova/gpt2');
-		active = true;
+	onMount(() => {
+		let unsubscribe = () => {};
+		(async () => {
+			try {
+				const gpt2Tokenizer = await AutoTokenizer.from_pretrained('Xenova/gpt2');
+				active = true;
+				unsubscribe = subscribeInputs(gpt2Tokenizer);
 
-		const unsubscribe = subscribeInputs(gpt2Tokenizer);
+				if (!$isMobile && $vizMode === 'transformer') {
+					await fetchModel();
+				}
+			} catch (error) {
+				// Keep the app usable when tokenizer assets are unavailable in local dev.
+				console.warn('Tokenizer unavailable, falling back to mock visualization mode.', error);
+				vizMode.set('vision');
+				active = true;
+			}
+		})();
 
-		if (!$isMobile) {
-			await fetchModel();
-		}
-
-		return unsubscribe;
+		return () => {
+			unsubscribe();
+		};
 	});
 
 	// Fetch model onnx
 	const fetchModel = async () => {
+		if (isModelFetchStarted || $modelSession) return;
+		isModelFetchStarted = true;
 		const chunkNum = 63; //TODO: move to model meta
 		const chunkUrls = Array(chunkNum)
 			.fill(0)
@@ -90,13 +108,18 @@
 		isFetchingModel.set(false);
 
 		const loadTime = Date.now() - appStartTime;
-		window.dataLayer?.push({
+		(window as any).dataLayer?.push({
 			event: `model-loaded`,
 			use_cache: hasCache,
 			load_time_ms: loadTime,
 			user_id: $userId
 		});
 	};
+
+	$: if (active && !$isMobile && $vizMode === 'transformer' && !$modelSession && $isFetchingModel) {
+		fetchModel();
+	}
+	$: selectedPipelineMode = $vizMode === 'summarization' ? 'summarization' : 'vision';
 
 	// Subscribe inputs
 	const cachedDataMap = [ex0, ex1, ex2, ex3, ex4];
@@ -185,6 +208,16 @@
 	class="main-section h-full w-full"
 	style={`--vector-height: ${$vectorHeight}px;--title-height: ${titleHeight}px;--content-height:${vizHeight - titleHeight}px;`}
 >
+	<div class="viz-mode-switch">
+		<button class:active={$vizMode === 'transformer'} on:click={() => vizMode.set('transformer')}
+			>Transformer</button
+		>
+		<button class:active={$vizMode === 'vision'} on:click={() => vizMode.set('vision')}>Vision</button>
+		<button
+			class:active={$vizMode === 'summarization'}
+			on:click={() => vizMode.set('summarization')}>Summarization</button
+		>
+	</div>
 	{#if !!$expandedBlock.id}
 		<div
 			class={classNames('dim', `${$expandedBlock.id || ''}`)}
@@ -199,32 +232,40 @@
 			transition:fade={{ duration: 100 }}
 		></div>
 	{/if}
-	<div class="sankey opacity-1" class:attention={$expandedBlock.id === 'attention'}>
-		<Sankey />
-	</div>
-	<div class="nodes resize-watch">
-		<div class="steps" class:expanded={!!$expandedBlock.id} bind:offsetHeight={vizHeight}>
-			<Embedding className="step" />
-			<div class="blocks relative">
-				<div class="block-steps main" class:initial={$blockIdx === 0}>
-					<QKV className="step" />
-					<Attention className="step" />
-					<Mlp className="step" />
-				</div>
-				<div
-					class="block-steps next"
-					class:hide={!$isOnBlockTransition}
-					class:initial={$blockIdx === 0}
-				>
-					<QKV className="step" />
-					<Attention className="step" />
-					<Mlp className="step" />
-				</div>
-				<div class="transition-watch" class:hide={!$isOnBlockTransition}></div>
-			</div>
-			<SubsequentBlocks className="step" />
-			<LinearSoftmax className="step" />
+	{#if $vizMode === 'transformer'}
+		<div class="sankey opacity-1" class:attention={$expandedBlock.id === 'attention'}>
+			<Sankey />
 		</div>
+	{/if}
+	<div class="nodes resize-watch">
+		{#if $vizMode === 'transformer'}
+			<div class="steps" class:expanded={!!$expandedBlock.id} bind:offsetHeight={vizHeight}>
+				<Embedding className="step" />
+				<div class="blocks relative">
+					<div class="block-steps main" class:initial={$blockIdx === 0}>
+						<QKV className="step" />
+						<Attention className="step" />
+						<Mlp className="step" />
+					</div>
+					<div
+						class="block-steps next"
+						class:hide={!$isOnBlockTransition}
+						class:initial={$blockIdx === 0}
+					>
+						<QKV className="step" />
+						<Attention className="step" />
+						<Mlp className="step" />
+					</div>
+					<div class="transition-watch" class:hide={!$isOnBlockTransition}></div>
+				</div>
+				<SubsequentBlocks className="step" />
+				<LinearSoftmax className="step" />
+			</div>
+		{:else}
+			<div class="multi-wrap" bind:offsetHeight={vizHeight}>
+				<MultiTaskFlow mode={selectedPipelineMode} />
+			</div>
+		{/if}
 		<WeightPopovers />
 		<BlockTransition />
 		{#if !$isMobile}
@@ -234,6 +275,33 @@
 </div>
 
 <style lang="scss">
+	.viz-mode-switch {
+		position: absolute;
+		top: 0.6rem;
+		right: 1.2rem;
+		z-index: 1200;
+		display: inline-flex;
+		gap: 0.45rem;
+		padding: 0.3rem;
+		border: 1px solid theme('colors.gray.200');
+		border-radius: 0.7rem;
+		background: rgba(255, 255, 255, 0.95);
+		backdrop-filter: blur(6px);
+		button {
+			border: 1px solid transparent;
+			padding: 0.3rem 0.55rem;
+			border-radius: 0.5rem;
+			color: theme('colors.gray.500');
+			font-size: 0.78rem;
+			font-weight: 500;
+			transition: all 150ms;
+			&.active {
+				color: theme('colors.gray.700');
+				background: theme('colors.indigo.50');
+				border-color: theme('colors.indigo.200');
+			}
+		}
+	}
 	.main-section {
 		opacity: 0;
 		&.active {
@@ -337,6 +405,11 @@
 				}
 			}
 		}
+	}
+	.multi-wrap {
+		height: 100%;
+		width: 100%;
+		padding-top: 3.2rem;
 	}
 	@keyframes width-collapse {
 		0% {
